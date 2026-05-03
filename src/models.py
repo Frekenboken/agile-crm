@@ -51,6 +51,12 @@ class Task(Base):
     sprint_id = Column(Integer, ForeignKey("sprints.id", ondelete="SET NULL"), nullable=True)
     sprint = relationship("Sprint", back_populates="tasks")
 
+class Epic(Base):
+    __tablename__ = "epics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True)
+
 class Project(Base):
     __tablename__ = "projects"
 
