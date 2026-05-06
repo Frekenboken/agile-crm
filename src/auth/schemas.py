@@ -1,19 +1,21 @@
-from pydantic import BaseModel
-
+from pydantic import BaseModel, EmailStr
+from uuid import UUID
+from typing import Optional
 
 class CurrentUserResponse(BaseModel):
-    id: int
-    email: str
-
+    id: UUID
+    email: EmailStr
 
 class UserResponse(BaseModel):
-    email: str
-
+    id: UUID
+    email: EmailStr
+    first_name: str
+    last_name: str
+    avatar_url: Optional[str] = None
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
-
 
 class LoginResponse(BaseModel):
     access_token: str

@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.db import engine
-from src.models import Base, UserRole
-from src.routers import user, task, sprint, project, project_member
+from src.models import Base
+from src.routers import router as main_router
 from src.auth import router as auth
 
 from src.auth.security import security
@@ -24,11 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(user.router)
-app.include_router(task.router)
-app.include_router(sprint.router)
-app.include_router(project.router)
-app.include_router(project_member.router)
+app.include_router(main_router)
 app.include_router(auth.router)
 
 security.handle_errors(app)
