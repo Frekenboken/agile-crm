@@ -1,5 +1,6 @@
 import enum
 import uuid
+from functools import total_ordering
 from datetime import datetime
 from sqlalchemy import (
     Column, String, Text, Integer, Boolean, DateTime, Date,
@@ -8,6 +9,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.dialects.postgresql import UUID  # Для SQLite будет работать как тип через расширение
+
+
 
 class Base(AsyncAttrs, DeclarativeBase):
     pass
@@ -26,6 +29,7 @@ class TaskStatus(enum.Enum):
     todo = "todo"
     in_progress = "in_progress"
     review = "review"
+    testing = "testing"
     done = "done"
 
 
@@ -36,22 +40,36 @@ class TaskPriority(enum.Enum):
     low = "low"
     lowest = "lowest"
 
+
 # Роли
-class OrganisationRole(enum.Enum):
-    owner = "owner"
-    admin = "admin"
+@total_ordering
+class UserRole(enum.Enum):
+    def __lt__(self, other):
+        if self.__class__ is other.__class__:
+            # Сравниваем по индексу в списке (порядку объявления)
+            members = list(self.__class__)
+            return members.index(self) < members.index(other)
+        return NotImplemented
+
+    # Мы НЕ переопределяем __eq__ вручную, так как Enum уже умеет
+    # сравнивать себя. Это сохраняет объект хешируемым для SQLAlchemy.
+    # total_ordering подхватит стандартный Enum.__eq__
+
+class OrganisationRole(UserRole):
     member = "member"
+    admin = "admin"
+    owner = "owner"
 
-
-class ProjectRole(enum.Enum):
+class ProjectRole(UserRole):
+    developer = "developer"
     scrum_master = "scrum_master"
     product_owner = "product_owner"
-    developer = "developer"
 
-class ParticipantRole(enum.Enum):
+class ParticipantRole(UserRole):
     worker = "worker"
     reviewer = "reviewer"
     tester = "tester"
+
 
 # --- ТАБЛИЦЫ ---
 
@@ -85,7 +103,7 @@ class Project(Base):
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint('organisation_id', 'name', name='uq_project_org_name'),
+        UniqueConstraint('organisation_id', 'name', name='uq_project_organisation_name'),
     )
 
 
@@ -99,7 +117,7 @@ class OrganisationMember(Base):
     joined_at = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (
-        UniqueConstraint('organisation_id', 'user_id', name='uq_org_member'),
+        UniqueConstraint('organisation_id', 'user_id', name='uq_organisation_member'),
     )
 
 

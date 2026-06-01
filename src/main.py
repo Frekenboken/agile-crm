@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -9,12 +10,26 @@ from src.core.db import engine
 from src.models import Base
 from src.routers import router as main_router
 from src.auth import router as auth
-
 from src.auth.security import security
-# from src.schemas.driver import DriverCreate
-# from src.schemas.user import UserCreate, UserUpdate
 
-app = FastAPI()
+
+# Современный подход с lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Запускается при старте и завершении приложения"""
+    # Код при старте (бывший on_event("startup"))
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield  # Здесь приложение работает
+
+    # Код при завершении (бывший on_event("shutdown"))
+    # Например: закрытие соединений, очистка ресурсов
+    await engine.dispose()
+
+
+# Создаем приложение с lifespan
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,8 +43,3 @@ app.include_router(main_router)
 app.include_router(auth.router)
 
 security.handle_errors(app)
-
-@app.on_event("startup")
-async def on_startup():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)

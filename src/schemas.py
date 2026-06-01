@@ -194,6 +194,9 @@ class TaskCommentRead(TaskCommentBase):
     created_at: datetime
     updated_at: datetime
 
+class TaskCommentUpdate(TaskCommentBase):
+    pass
+
 
 # --- CHECKLIST ITEM ---
 
@@ -230,3 +233,6 @@ class TaskParticipantRead(TaskParticipantBase):
     task_id: UUID
     user_id: UUID
     joined_at: datetime
+
+class TaskParticipantUpdate(TaskParticipantBase):
+    role: ParticipantRole

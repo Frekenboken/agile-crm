@@ -9,7 +9,7 @@ from src.auth.hashing import get_password_hash
 # Импорт моделей и схем (поправь пути под свою структуру проекта)
 from src.models import (
     Organisation, User, Project, OrganisationMember, ProjectMember,
-    Sprint, Task, TaskComment, ChecklistItem, TaskParticipant
+    Sprint, Task, TaskComment, ChecklistItem, TaskParticipant, TaskStatus
 )
 from src.schemas import (
     OrganisationCreate, OrganisationUpdate,
@@ -21,7 +21,7 @@ from src.schemas import (
     TaskCreate, TaskUpdate,
     TaskCommentCreate,
     ChecklistItemCreate,
-    TaskParticipantCreate
+    TaskParticipantCreate, TaskParticipantUpdate, TaskCommentUpdate
 )
 
 
@@ -32,6 +32,11 @@ from src.schemas import (
 async def get_user(db: AsyncSession, user_id: UUID) -> Optional[User]:
     result = await db.execute(select(User).where(User.id == str(user_id)))
     return result.scalars().first()
+
+
+async def get_all_users(db: AsyncSession) -> List[User]:
+    result = await db.execute(select(User))
+    return list(result.scalars().all())
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
@@ -75,13 +80,19 @@ async def delete_user(db: AsyncSession, user_id: UUID) -> bool:
     await db.commit()
     return True
 
+
 # ==============================================================================
 # 2. ORGANISATION CRUD
 # ==============================================================================
 
-async def get_organisation(db: AsyncSession, org_id: UUID) -> Optional[Organisation]:
-    result = await db.execute(select(Organisation).where(Organisation.id == str(org_id)))
+async def get_organisation(db: AsyncSession, organisation_id: UUID) -> Optional[Organisation]:
+    result = await db.execute(select(Organisation).where(Organisation.id == str(organisation_id)))
     return result.scalars().first()
+
+
+async def get_all_organisations(db: AsyncSession) -> List[Organisation]:
+    result = await db.execute(select(Organisation))
+    return result.scalars().all()
 
 
 async def create_organisation(db: AsyncSession, schema: OrganisationCreate) -> Organisation:
@@ -92,8 +103,9 @@ async def create_organisation(db: AsyncSession, schema: OrganisationCreate) -> O
     return db_obj
 
 
-async def update_organisation(db: AsyncSession, org_id: UUID, schema: OrganisationUpdate) -> Optional[Organisation]:
-    db_obj = await get_organisation(db, org_id)
+async def update_organisation(db: AsyncSession, organisation_id: UUID, schema: OrganisationUpdate) -> Optional[
+    Organisation]:
+    db_obj = await get_organisation(db, organisation_id)
     if not db_obj:
         return None
     db_obj.name = schema.name
@@ -102,8 +114,8 @@ async def update_organisation(db: AsyncSession, org_id: UUID, schema: Organisati
     return db_obj
 
 
-async def delete_organisation(db: AsyncSession, org_id: UUID) -> bool:
-    db_obj = await get_organisation(db, org_id)
+async def delete_organisation(db: AsyncSession, organisation_id: UUID) -> bool:
+    db_obj = await get_organisation(db, organisation_id)
     if not db_obj:
         return False
     await db.delete(db_obj)
@@ -115,13 +127,28 @@ async def delete_organisation(db: AsyncSession, org_id: UUID) -> bool:
 # 3. ORGANISATION MEMBER CRUD
 # ==============================================================================
 
-async def get_org_member(db: AsyncSession, member_id: UUID) -> Optional[OrganisationMember]:
+async def get_organisation_member_by_user_and_org(
+        db: AsyncSession,
+        user_id: UUID,
+        organisation_id: UUID
+) -> Optional[OrganisationMember]:
+    result = await db.execute(
+        select(OrganisationMember).where(
+            OrganisationMember.user_id == str(user_id),
+            OrganisationMember.organisation_id == str(organisation_id)
+        )
+    )
+    return result.scalars().first()
+
+
+async def get_organisation_member(db: AsyncSession, member_id: UUID) -> Optional[OrganisationMember]:
     result = await db.execute(select(OrganisationMember).where(OrganisationMember.id == str(member_id)))
     return result.scalars().first()
 
 
-async def get_org_members(db: AsyncSession, org_id: UUID) -> List[OrganisationMember]:
-    result = await db.execute(select(OrganisationMember).where(OrganisationMember.organisation_id == str(org_id)))
+async def get_organisation_members(db: AsyncSession, organisation_id: UUID) -> List[OrganisationMember]:
+    result = await db.execute(
+        select(OrganisationMember).where(OrganisationMember.organisation_id == str(organisation_id)))
     return list(result.scalars().all())
 
 
@@ -137,19 +164,23 @@ async def add_user_to_organisation(db: AsyncSession, schema: OrganisationMemberC
     return db_obj
 
 
-async def update_org_member_role(db: AsyncSession, member_id: UUID, schema: OrganisationMemberUpdate) -> Optional[
+async def update_organisation_member(db: AsyncSession, member_id: UUID, schema: OrganisationMemberUpdate) -> Optional[
     OrganisationMember]:
-    db_obj = await get_org_member(db, member_id)
+    db_obj = await get_organisation_member(db, member_id)
     if not db_obj:
         return None
-    db_obj.role = schema.role
+
+    update_data = schema.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_obj, key, value)
+
     await db.commit()
     await db.refresh(db_obj)
     return db_obj
 
 
-async def remove_user_from_organisation(db: AsyncSession, member_id: UUID) -> bool:
-    db_obj = await get_org_member(db, member_id)
+async def delete_organisation_member(db: AsyncSession, member_id: UUID) -> bool:
+    db_obj = await get_organisation_member(db, member_id)
     if not db_obj:
         return False
     await db.delete(db_obj)
@@ -166,8 +197,8 @@ async def get_project(db: AsyncSession, project_id: UUID) -> Optional[Project]:
     return result.scalars().first()
 
 
-async def get_projects_by_organisation(db: AsyncSession, org_id: UUID) -> List[Project]:
-    result = await db.execute(select(Project).where(Project.organisation_id == str(org_id)))
+async def get_projects_by_organisation(db: AsyncSession, organisation_id: UUID) -> List[Project]:
+    result = await db.execute(select(Project).where(Project.organisation_id == str(organisation_id)))
     return list(result.scalars().all())
 
 
@@ -210,6 +241,20 @@ async def delete_project(db: AsyncSession, project_id: UUID) -> bool:
 # 5. PROJECT MEMBER CRUD
 # ==============================================================================
 
+async def get_project_member_by_user_and_project(
+        db: AsyncSession,
+        user_id: UUID,
+        project_id: UUID
+) -> Optional[ProjectMember]:
+    result = await db.execute(
+        select(ProjectMember).where(
+            ProjectMember.user_id == str(user_id),
+            ProjectMember.project_id == str(project_id)
+        )
+    )
+    return result.scalars().first()
+
+
 async def get_project_member(db: AsyncSession, member_id: UUID) -> Optional[ProjectMember]:
     result = await db.execute(select(ProjectMember).where(ProjectMember.id == str(member_id)))
     return result.scalars().first()
@@ -232,12 +277,16 @@ async def add_user_to_project(db: AsyncSession, schema: ProjectMemberCreate) -> 
     return db_obj
 
 
-async def update_project_member_role(db: AsyncSession, member_id: UUID, schema: ProjectMemberUpdate) -> Optional[
+async def update_project_member(db: AsyncSession, member_id: UUID, schema: ProjectMemberUpdate) -> Optional[
     ProjectMember]:
     db_obj = await get_project_member(db, member_id)
     if not db_obj:
         return None
-    db_obj.role = schema.role
+
+    update_data = schema.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_obj, key, value)
+
     await db.commit()
     await db.refresh(db_obj)
     return db_obj
@@ -305,6 +354,51 @@ async def delete_sprint(db: AsyncSession, sprint_id: UUID) -> bool:
     return True
 
 
+async def start_sprint(db: AsyncSession, sprint_id: UUID) -> Optional[Sprint]:
+    db_obj = await get_sprint(db, sprint_id)
+    if not db_obj:
+        return None
+
+    result = await db.execute(
+        select(Sprint).where(
+            Sprint.project_id == db_obj.project_id,
+            Sprint.is_active == True,
+            Sprint.id != sprint_id
+        )
+    )
+    active_sprint = result.scalars().first()
+    if active_sprint:
+        raise ValueError(
+            f"Project already has an active sprint: '{active_sprint.name}'. "
+            f"Complete it before starting a new one."
+        )
+
+    db_obj.is_active = True
+    await db.commit()
+    await db.refresh(db_obj)
+    return db_obj
+
+
+async def complete_sprint(db: AsyncSession, sprint_id: UUID) -> Optional[Sprint]:
+    db_obj = await get_sprint(db, sprint_id)
+    if not db_obj:
+        return None
+
+    db_obj.is_active = False
+    db_obj.is_completed = True
+
+    # Отвязываем все задачи от спринта
+    result = await db.execute(
+        select(Task).where(Task.sprint_id == str(sprint_id))
+    )
+    tasks = result.scalars().all()
+    for task in tasks:
+        task.sprint_id = None
+
+    await db.commit()
+    await db.refresh(db_obj)
+    return db_obj
+
 # ==============================================================================
 # 7. TASK CRUD
 # ==============================================================================
@@ -345,12 +439,33 @@ async def create_task(db: AsyncSession, schema: TaskCreate) -> Task:
     return db_obj
 
 
+# В crud.py, перед функциями
+
+ALLOWED_STATUS_TRANSITIONS = {
+    TaskStatus.todo: [TaskStatus.in_progress],
+    TaskStatus.in_progress: [TaskStatus.review, TaskStatus.todo],
+    TaskStatus.review: [TaskStatus.testing, TaskStatus.in_progress],
+    TaskStatus.testing: [TaskStatus.done, TaskStatus.in_progress],
+    TaskStatus.done: [],  # из done нельзя перейти никуда
+}
+
+
 async def update_task(db: AsyncSession, task_id: UUID, schema: TaskUpdate) -> Optional[Task]:
     db_obj = await get_task(db, task_id)
     if not db_obj:
         return None
 
     update_data = schema.model_dump(exclude_unset=True)
+
+    # Проверка перехода статуса
+    if 'status' in update_data:
+        new_status = update_data['status']
+        allowed = ALLOWED_STATUS_TRANSITIONS.get(db_obj.status, [])
+        if new_status not in allowed:
+            raise ValueError(
+                f"Transition from '{db_obj.status.value}' to '{new_status.value}' is not allowed"
+            )
+
     for key, value in update_data.items():
         if key in ['sprint_id', 'parent_task_id'] and value is not None:
             setattr(db_obj, key, str(value))
@@ -406,6 +521,20 @@ async def delete_comment(db: AsyncSession, comment_id: UUID) -> bool:
     return True
 
 
+async def update_comment(db: AsyncSession, comment_id: UUID, schema: TaskCommentUpdate) -> Optional[TaskComment]:
+    db_obj = await get_comment(db, comment_id)
+    if not db_obj:
+        return None
+
+    update_data = schema.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_obj, key, value)
+
+    await db.commit()
+    await db.refresh(db_obj)
+    return db_obj
+
+
 # ==============================================================================
 # 9. CHECKLIST ITEM CRUD
 # ==============================================================================
@@ -431,6 +560,7 @@ async def create_checklist_item(db: AsyncSession, schema: ChecklistItemCreate) -
     await db.commit()
     await db.refresh(db_obj)
     return db_obj
+
 
 async def toggle_checklist_item(db: AsyncSession, item_id: UUID, completed_by_user_id: UUID) -> Optional[ChecklistItem]:
     """Специальный метод для отметки пункта чек-листа выполненным/невыполненным"""
@@ -464,6 +594,20 @@ async def delete_checklist_item(db: AsyncSession, item_id: UUID) -> bool:
 # 10. TASK PARTICIPANT CRUD
 # ==============================================================================
 
+async def get_task_participant_by_user_and_task(
+        db: AsyncSession,
+        user_id: UUID,
+        task_id: UUID
+) -> Optional[TaskParticipant]:
+    result = await db.execute(
+        select(TaskParticipant).where(
+            TaskParticipant.user_id == str(user_id),
+            TaskParticipant.task_id == str(task_id)
+        )
+    )
+    return result.scalars().first()
+
+
 async def get_participant(db: AsyncSession, participant_id: UUID) -> Optional[TaskParticipant]:
     result = await db.execute(select(TaskParticipant).where(TaskParticipant.id == str(participant_id)))
     return result.scalars().first()
@@ -493,3 +637,18 @@ async def remove_participant_from_task(db: AsyncSession, participant_id: UUID) -
     await db.delete(db_obj)
     await db.commit()
     return True
+
+
+async def update_task_participant(db: AsyncSession, participant_id: UUID, schema: TaskParticipantUpdate) -> Optional[
+    TaskParticipant]:
+    db_obj = await get_participant(db, participant_id)
+    if not db_obj:
+        return None
+
+    update_data = schema.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_obj, key, value)
+
+    await db.commit()
+    await db.refresh(db_obj)
+    return db_obj

@@ -48,7 +48,7 @@ async def login(
     )
 
 
-@router.post("/register", response_model=LoginResponse)
+@router.post("/register", response_model=LoginResponse, status_code=201)
 async def register(
         form: UserCreate,
         response: Response,
